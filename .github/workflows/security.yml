@@ -42,9 +42,15 @@ jobs:
         run: |
           echo "Scanning for potential secrets in shell scripts..."
           
-          # Look for common secret patterns
-          if grep -r -E "(password|secret|key|token|api.*key)" --include="*.sh" . | grep -v "PROXMOX_SSH_KEY_PATH" | grep -v "validate_ssh_key" | grep -v "# "; then
+          # Look for hardcoded secret patterns (excluding legitimate SSH key references)
+          if grep -r -E "(password\s*=|secret\s*=|token\s*=|api.*key\s*=)" --include="*.sh" . | grep -v "# "; then
             echo "⚠ Potential hardcoded secrets found. Review the above matches."
+            exit 1
+          fi
+          
+          # Check for suspicious base64 or hex patterns that might be secrets
+          if grep -r -E "([A-Za-z0-9+/]{40,}={0,2}|[0-9a-fA-F]{32,})" --include="*.sh" . | grep -v "# " | grep -v "template" | grep -v "ubuntu"; then
+            echo "⚠ Potential encoded secrets found. Review the above matches."
             exit 1
           fi
           
