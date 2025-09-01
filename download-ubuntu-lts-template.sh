@@ -175,7 +175,8 @@ function get_latest_ubuntu_lts() {
     fi
 
     log_ok "Latest Ubuntu LTS template identified: $latest_template"
-    echo "$latest_template"
+    # Return template name for caller (don't echo to avoid duplicate output)
+    printf '%s' "$latest_template"
 }
 
 function check_existing_template() {
@@ -305,15 +306,22 @@ function cleanup_old_templates() {
 
 function display_completion_message() {
     local template="$1"
+    local downloaded="$2"
+    # Extract just the template filename (remove system: prefix)
+    local template_name="${template##*:}"
 
-    log_ok "Ubuntu LTS template download completed successfully!"
+    if [[ "$downloaded" == "true" ]]; then
+        log_ok "Ubuntu LTS template download completed successfully!"
+    else
+        log_ok "Ubuntu LTS template operation completed!"
+    fi
     echo
     log_info "Template Details:"
-    log_info "  Template Name: $template"
-    log_info "  Location: /var/lib/vz/template/cache/$template"
+    log_info "  Template Name: $template_name"
+    log_info "  Location: /var/lib/vz/template/cache/$template_name"
     echo
     log_info "Usage:"
-    log_info "  Create container: pct create VMID /var/lib/vz/template/cache/$template"
+    log_info "  Create container: pct create VMID /var/lib/vz/template/cache/$template_name"
     log_info "  List templates: pveam list local"
     echo
     log_info "Next Steps:"
@@ -333,20 +341,23 @@ function main() {
     local latest_template
     latest_template=$(get_latest_ubuntu_lts)
 
+    local downloaded="false"
     if check_existing_template "$latest_template"; then
         if [[ "${FORCE_DOWNLOAD:-false}" == "true" ]]; then
             log_info "Forcing re-download due to FORCE_DOWNLOAD=true"
             download_template "$latest_template"
+            downloaded="true"
         else
             log_info "Template already exists. Use FORCE_DOWNLOAD=true to re-download"
         fi
     else
         download_template "$latest_template"
+        downloaded="true"
     fi
 
     cleanup_old_templates
     list_all_templates
-    display_completion_message "$latest_template"
+    display_completion_message "$latest_template" "$downloaded"
 }
 
 # Prevent script from being sourced
