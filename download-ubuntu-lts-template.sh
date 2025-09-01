@@ -6,8 +6,7 @@
 
 set -Eeuo pipefail
 
-readonly SCRIPT_DIR
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly BASE_DIR="${SCRIPT_DIR}/.."
 readonly LOG_DIR="${BASE_DIR}/logs"
 readonly LOG_FILE="${LOG_DIR}/template-download.log"
@@ -154,16 +153,17 @@ function get_latest_ubuntu_lts() {
     local latest_template=""
     
     # Try to find Ubuntu 24.04 first (latest LTS as of 2024)
-    latest_template=$(echo "$available_templates" | grep "24\.04" | head -n1 | awk '{print $2}' || echo "")
+    # Get the full template identifier (system:template-name)
+    latest_template=$(echo "$available_templates" | grep "24\.04" | head -n1 | awk '{print $1":"$2}' || echo "")
     
     if [[ -z "$latest_template" ]]; then
         # Fall back to 22.04
-        latest_template=$(echo "$available_templates" | grep "22\.04" | head -n1 | awk '{print $2}' || echo "")
+        latest_template=$(echo "$available_templates" | grep "22\.04" | head -n1 | awk '{print $1":"$2}' || echo "")
     fi
     
     if [[ -z "$latest_template" ]]; then
         # Fall back to 20.04
-        latest_template=$(echo "$available_templates" | grep "20\.04" | head -n1 | awk '{print $2}' || echo "")
+        latest_template=$(echo "$available_templates" | grep "20\.04" | head -n1 | awk '{print $1":"$2}' || echo "")
     fi
 
     if [[ -z "$latest_template" ]]; then
@@ -178,7 +178,7 @@ function get_latest_ubuntu_lts() {
 }
 
 function check_existing_template() {
-    local template="$1"
+    local template_id="$1"
     
     local ssh_opts=""
     if [[ -n "${PROXMOX_SSH_KEY_PATH:-}" ]]; then
@@ -187,15 +187,18 @@ function check_existing_template() {
 
     log_info "Checking if template already exists..."
     
-    # Check if template is already downloaded
+    # Extract just the filename part for checking local templates
+    local template_filename="${template_id##*:}"
+    
+    # Check if template is already downloaded using pveam list
     # shellcheck disable=SC2029 # Variables intentionally expand on client side
-    if ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "test -f /var/lib/vz/template/cache/$template" 2>/dev/null; then
-        log_warn "Template already exists: $template"
+    if ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam list local | grep -q '$template_filename'" 2>/dev/null; then
+        log_warn "Template already exists: $template_id"
         
-        # Get file size and modification time
+        # Get template info from pveam list
         local template_info
         # shellcheck disable=SC2029 # Variables intentionally expand on client side
-        template_info=$(ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "ls -lh /var/lib/vz/template/cache/$template" 2>/dev/null || echo "")
+        template_info=$(ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam list local | grep '$template_filename'" 2>/dev/null || echo "")
         
         if [[ -n "$template_info" ]]; then
             log_info "Existing template details: $template_info"
@@ -216,28 +219,33 @@ function download_template() {
         ssh_opts="-i ${PROXMOX_SSH_KEY_PATH}"
     fi
 
-    log_info "Downloading Ubuntu LTS template: $template"
+    # Extract just the template filename (remove system: prefix)
+    local template_name="${template##*:}"
+
+    log_info "Downloading Ubuntu LTS template: $template_name"
     log_info "This may take several minutes depending on network speed..."
 
-    # Download the template
+    # Download the template using just the filename
     # shellcheck disable=SC2029 # Variables intentionally expand on client side
-    if ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam download local $template" 2>&1 | tee -a "$LOG_FILE"; then
-        log_ok "Template downloaded successfully: $template"
+    if ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam download local $template_name" 2>&1 | tee -a "$LOG_FILE"; then
+        log_ok "Template downloaded successfully: $template_name"
     else
-        log_error "Failed to download template: $template"
+        log_error "Failed to download template: $template_name"
         exit 1
     fi
 
-    # Verify the download
+    # Verify the download using pveam list
     # shellcheck disable=SC2029 # Variables intentionally expand on client side
-    if ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "test -f /var/lib/vz/template/cache/$template" 2>/dev/null; then
+    if ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam list local | grep -q '$template_name'" 2>/dev/null; then
         log_ok "Template download verified"
         
-        # Show template size
-        local template_size
+        # Show template info from pveam list
+        local template_info
         # shellcheck disable=SC2029 # Variables intentionally expand on client side
-        template_size=$(ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "ls -lh /var/lib/vz/template/cache/$template | awk '{print \$5}'" 2>/dev/null || echo "unknown")
-        log_info "Template size: $template_size"
+        template_info=$(ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam list local | grep '$template_name'" 2>/dev/null || echo "")
+        if [[ -n "$template_info" ]]; then
+            log_info "Template info: $template_info"
+        fi
     else
         log_error "Template verification failed"
         exit 1
