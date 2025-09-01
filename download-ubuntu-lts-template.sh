@@ -8,7 +8,8 @@ set -Eeuo pipefail
 
 readonly SCRIPT_DIR
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly LOG_DIR="${SCRIPT_DIR}/logs"
+readonly BASE_DIR="${SCRIPT_DIR}/.."
+readonly LOG_DIR="${BASE_DIR}/logs"
 readonly LOG_FILE="${LOG_DIR}/template-download.log"
 
 # Create logs directory if it doesn't exist
@@ -42,7 +43,7 @@ function error_handler() {
 trap 'error_handler $LINENO $?' ERR
 
 function load_environment() {
-    local env_file="${SCRIPT_DIR}/.env"
+    local env_file="${BASE_DIR}/.env"
 
     if [[ ! -f "$env_file" ]]; then
         log_error "Environment file not found: $env_file"
