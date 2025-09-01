@@ -1,0 +1,66 @@
+# Repository settings managed via GitHub Settings App
+# See: https://github.com/apps/settings
+
+repository:
+  name: templates
+  description: "Proxmox container templates and deployment scripts"
+  private: false
+  has_issues: true
+  has_projects: false
+  has_wiki: false
+  has_downloads: true
+  default_branch: main
+  allow_squash_merge: true
+  allow_merge_commit: true
+  allow_rebase_merge: false
+  delete_branch_on_merge: true
+  enable_automated_security_fixes: true
+  enable_vulnerability_alerts: true
+
+# Branch protection rules
+branches:
+  - name: main
+    protection:
+      required_status_checks:
+        strict: true
+        checks:
+          - context: "ShellCheck Analysis"
+          - context: "Bash Syntax Validation"
+          - context: "File Permissions Check"
+          - context: "Script Header Validation"
+          - context: "Trivy Security Scan"
+          - context: "Secret Scanning"
+      enforce_admins: true
+      required_pull_request_reviews:
+        required_approving_review_count: 1
+        dismiss_stale_reviews: true
+        require_code_owner_reviews: false
+        require_last_push_approval: false
+      required_linear_history: false
+      allow_force_pushes: false
+      allow_deletions: false
+      required_conversation_resolution: true
+
+# Repository labels for issue/PR management
+labels:
+  - name: bug
+    color: d73a4a
+    description: Something isn't working
+  - name: enhancement
+    color: a2eeef
+    description: New feature or request
+  - name: documentation
+    color: 0075ca
+    description: Improvements or additions to documentation
+  - name: security
+    color: ee0701
+    description: Security related issues
+  - name: shell-script
+    color: f9d0c4
+    description: Related to shell script functionality
+
+# Collaborate settings
+collaborators:
+  # Add collaborators as needed
+  # - username: collaborator-username
+  #   permission: push

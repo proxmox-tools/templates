@@ -1,0 +1,73 @@
+name: Shell Script Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  shellcheck:
+    name: ShellCheck Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          format: gcc
+          severity: error
+        env:
+          SHELLCHECK_OPTS: -e SC1091 -e SC2034
+
+  syntax-check:
+    name: Bash Syntax Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate bash syntax
+        run: |
+          find . -name "*.sh" -type f | while read -r file; do
+            echo "Checking syntax: $file"
+            bash -n "$file" || exit 1
+          done
+
+  permissions-check:
+    name: File Permissions Check  
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check shell script permissions
+        run: |
+          find . -name "*.sh" -type f | while read -r file; do
+            if [[ ! -x "$file" ]]; then
+              echo "ERROR: Script not executable: $file"
+              exit 1
+            fi
+            echo "✓ Executable: $file"
+          done
+
+  header-validation:
+    name: Script Header Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check script headers
+        run: |
+          # Check shell scripts have proper headers/comments
+          find . -name "*.sh" -type f | while read -r file; do
+            if head -n 10 "$file" | grep -q "^#.*[Dd]escription\|^# .*[Ss]cript"; then
+              echo "✓ $file has descriptive header"
+            else
+              echo "⚠ $file missing descriptive header comment"
+            fi
+          done

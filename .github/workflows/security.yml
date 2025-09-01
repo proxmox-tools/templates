@@ -1,0 +1,51 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+
+jobs:
+  trivy-scan:
+    name: Trivy Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run secret detection
+        run: |
+          echo "Scanning for potential secrets in shell scripts..."
+          
+          # Look for common secret patterns
+          if grep -r -E "(password|secret|key|token|api.*key)" --include="*.sh" . | grep -v "PROXMOX_SSH_KEY_PATH" | grep -v "validate_ssh_key" | grep -v "# "; then
+            echo "⚠ Potential hardcoded secrets found. Review the above matches."
+            exit 1
+          fi
+          
+          echo "✓ No obvious hardcoded secrets detected"
