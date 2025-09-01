@@ -1,0 +1,57 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+
+jobs:
+  trivy-scan:
+    name: Trivy Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run secret detection
+        run: |
+          echo "Scanning for potential secrets in shell scripts..."
+          
+          # Look for hardcoded secret patterns (excluding legitimate SSH key references)
+          if grep -r -E "(password\s*=|secret\s*=|token\s*=|api.*key\s*=)" --include="*.sh" . | grep -v "# "; then
+            echo "⚠ Potential hardcoded secrets found. Review the above matches."
+            exit 1
+          fi
+          
+          # Check for suspicious base64 or hex patterns that might be secrets
+          if grep -r -E "([A-Za-z0-9+/]{40,}={0,2}|[0-9a-fA-F]{32,})" --include="*.sh" . | grep -v "# " | grep -v "template" | grep -v "ubuntu"; then
+            echo "⚠ Potential encoded secrets found. Review the above matches."
+            exit 1
+          fi
+          
+          echo "✓ No obvious hardcoded secrets detected"
