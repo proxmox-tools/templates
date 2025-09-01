@@ -6,7 +6,8 @@
 
 set -Eeuo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 readonly BASE_DIR="${SCRIPT_DIR}/.."
 readonly LOG_DIR="${BASE_DIR}/logs"
 readonly LOG_FILE="${LOG_DIR}/template-download.log"
@@ -105,12 +106,12 @@ function validate_ssh_connection() {
 
     validate_ssh_key
 
-    local ssh_opts="-o ConnectTimeout=10 -o BatchMode=yes"
+    local ssh_opts=(-o ConnectTimeout=10 -o BatchMode=yes)
     if [[ -n "${PROXMOX_SSH_KEY_PATH:-}" ]]; then
-        ssh_opts+=" -i ${PROXMOX_SSH_KEY_PATH}"
+        ssh_opts+=(-i "${PROXMOX_SSH_KEY_PATH}")
     fi
 
-    if ! ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveversion" >/dev/null 2>&1; then
+    if ! ssh "${ssh_opts[@]}" "${PROXMOX_USER}@${PROXMOX_HOST}" "pveversion" >/dev/null 2>&1; then
         log_error "Cannot connect to Proxmox server"
         log_info "Please ensure:"
         log_info "  - SSH key is properly configured"
@@ -125,23 +126,23 @@ function validate_ssh_connection() {
 function get_latest_ubuntu_lts() {
     log_info "Fetching latest Ubuntu LTS template information..."
 
-    local ssh_opts=""
+    local ssh_opts=()
     if [[ -n "${PROXMOX_SSH_KEY_PATH:-}" ]]; then
-        ssh_opts="-i ${PROXMOX_SSH_KEY_PATH}"
+        ssh_opts=(-i "${PROXMOX_SSH_KEY_PATH}")
     fi
 
     # Get available templates from Proxmox template repository
     local available_templates
     # shellcheck disable=SC2029 # Variables intentionally expand on client side
-    available_templates=$(ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam available --section system | grep -E 'ubuntu.*standard.*amd64' | grep -E '(20\.04|22\.04|24\.04)'" 2>/dev/null || echo "")
+    available_templates=$(ssh "${ssh_opts[@]}" "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam available --section system | grep -E 'ubuntu.*standard.*amd64' | grep -E '(20\.04|22\.04|24\.04)'" 2>/dev/null || echo "")
 
     if [[ -z "$available_templates" ]]; then
         log_error "No Ubuntu LTS templates found in repository"
         log_info "Updating template list..."
         # shellcheck disable=SC2029 # Variables intentionally expand on client side
-        ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam update" 2>/dev/null || true
+        ssh "${ssh_opts[@]}" "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam update" 2>/dev/null || true
         # shellcheck disable=SC2029 # Variables intentionally expand on client side
-        available_templates=$(ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam available --section system | grep -E 'ubuntu.*standard.*amd64' | grep -E '(20\.04|22\.04|24\.04)'" 2>/dev/null || echo "")
+        available_templates=$(ssh "${ssh_opts[@]}" "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam available --section system | grep -E 'ubuntu.*standard.*amd64' | grep -E '(20\.04|22\.04|24\.04)'" 2>/dev/null || echo "")
     fi
 
     if [[ -z "$available_templates" ]]; then
@@ -180,9 +181,9 @@ function get_latest_ubuntu_lts() {
 function check_existing_template() {
     local template_id="$1"
     
-    local ssh_opts=""
+    local ssh_opts=()
     if [[ -n "${PROXMOX_SSH_KEY_PATH:-}" ]]; then
-        ssh_opts="-i ${PROXMOX_SSH_KEY_PATH}"
+        ssh_opts=(-i "${PROXMOX_SSH_KEY_PATH}")
     fi
 
     log_info "Checking if template already exists..."
@@ -192,13 +193,13 @@ function check_existing_template() {
     
     # Check if template is already downloaded using pveam list
     # shellcheck disable=SC2029 # Variables intentionally expand on client side
-    if ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam list local | grep -q '$template_filename'" 2>/dev/null; then
+    if ssh "${ssh_opts[@]}" "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam list local | grep -q '$template_filename'" 2>/dev/null; then
         log_warn "Template already exists: $template_id"
         
         # Get template info from pveam list
         local template_info
         # shellcheck disable=SC2029 # Variables intentionally expand on client side
-        template_info=$(ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam list local | grep '$template_filename'" 2>/dev/null || echo "")
+        template_info=$(ssh "${ssh_opts[@]}" "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam list local | grep '$template_filename'" 2>/dev/null || echo "")
         
         if [[ -n "$template_info" ]]; then
             log_info "Existing template details: $template_info"
@@ -214,9 +215,9 @@ function check_existing_template() {
 function download_template() {
     local template="$1"
     
-    local ssh_opts=""
+    local ssh_opts=()
     if [[ -n "${PROXMOX_SSH_KEY_PATH:-}" ]]; then
-        ssh_opts="-i ${PROXMOX_SSH_KEY_PATH}"
+        ssh_opts=(-i "${PROXMOX_SSH_KEY_PATH}")
     fi
 
     # Extract just the template filename (remove system: prefix)
@@ -227,7 +228,7 @@ function download_template() {
 
     # Download the template using just the filename
     # shellcheck disable=SC2029 # Variables intentionally expand on client side
-    if ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam download local $template_name" 2>&1 | tee -a "$LOG_FILE"; then
+    if ssh "${ssh_opts[@]}" "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam download local $template_name" 2>&1 | tee -a "$LOG_FILE"; then
         log_ok "Template downloaded successfully: $template_name"
     else
         log_error "Failed to download template: $template_name"
@@ -236,13 +237,13 @@ function download_template() {
 
     # Verify the download using pveam list
     # shellcheck disable=SC2029 # Variables intentionally expand on client side
-    if ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam list local | grep -q '$template_name'" 2>/dev/null; then
+    if ssh "${ssh_opts[@]}" "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam list local | grep -q '$template_name'" 2>/dev/null; then
         log_ok "Template download verified"
         
         # Show template info from pveam list
         local template_info
         # shellcheck disable=SC2029 # Variables intentionally expand on client side
-        template_info=$(ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam list local | grep '$template_name'" 2>/dev/null || echo "")
+        template_info=$(ssh "${ssh_opts[@]}" "${PROXMOX_USER}@${PROXMOX_HOST}" "pveam list local | grep '$template_name'" 2>/dev/null || echo "")
         if [[ -n "$template_info" ]]; then
             log_info "Template info: $template_info"
         fi
@@ -253,14 +254,14 @@ function download_template() {
 }
 
 function list_all_templates() {
-    local ssh_opts=""
+    local ssh_opts=()
     if [[ -n "${PROXMOX_SSH_KEY_PATH:-}" ]]; then
-        ssh_opts="-i ${PROXMOX_SSH_KEY_PATH}"
+        ssh_opts=(-i "${PROXMOX_SSH_KEY_PATH}")
     fi
 
     log_info "Current template cache contents:"
     # shellcheck disable=SC2029 # Variables intentionally expand on client side
-    ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "ls -lh /var/lib/vz/template/cache/ | grep -E '\.(tar\.zst|tar\.xz|tar\.gz)$'" 2>/dev/null || log_warn "No templates found in cache"
+    ssh "${ssh_opts[@]}" "${PROXMOX_USER}@${PROXMOX_HOST}" "ls -lh /var/lib/vz/template/cache/ | grep -E '\.(tar\.zst|tar\.xz|tar\.gz)$'" 2>/dev/null || log_warn "No templates found in cache"
 }
 
 function cleanup_old_templates() {
@@ -269,9 +270,9 @@ function cleanup_old_templates() {
         return
     fi
 
-    local ssh_opts=""
+    local ssh_opts=()
     if [[ -n "${PROXMOX_SSH_KEY_PATH:-}" ]]; then
-        ssh_opts="-i ${PROXMOX_SSH_KEY_PATH}"
+        ssh_opts=(-i "${PROXMOX_SSH_KEY_PATH}")
     fi
 
     log_info "Cleaning up old Ubuntu templates..."
@@ -279,7 +280,7 @@ function cleanup_old_templates() {
     # Find old Ubuntu templates (keep only the latest downloaded one)
     local old_templates
     # shellcheck disable=SC2029 # Variables intentionally expand on client side
-    old_templates=$(ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "ls -t /var/lib/vz/template/cache/ubuntu-*-standard_*_amd64.tar.* 2>/dev/null | tail -n +2" 2>/dev/null || echo "")
+    old_templates=$(ssh "${ssh_opts[@]}" "${PROXMOX_USER}@${PROXMOX_HOST}" "ls -t /var/lib/vz/template/cache/ubuntu-*-standard_*_amd64.tar.* 2>/dev/null | tail -n +2" 2>/dev/null || echo "")
 
     if [[ -n "$old_templates" ]]; then
         log_info "Found old templates to clean up:"
@@ -293,7 +294,7 @@ function cleanup_old_templates() {
             template_name=$(basename "$template")
             log_info "Removing old template: $template_name"
             # shellcheck disable=SC2029 # Variables intentionally expand on client side
-            ssh $ssh_opts "${PROXMOX_USER}@${PROXMOX_HOST}" "rm -f '$template'" 2>/dev/null || log_warn "Failed to remove $template_name"
+            ssh "${ssh_opts[@]}" "${PROXMOX_USER}@${PROXMOX_HOST}" "rm -f '$template'" 2>/dev/null || log_warn "Failed to remove $template_name"
         done
 
         log_ok "Old template cleanup completed"
